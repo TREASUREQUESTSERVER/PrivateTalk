@@ -481,13 +481,35 @@ class FirebasePrivateTalkBackend : PrivateTalkBackend {
             .await()
     }
 
+    suspend fun publishIncomingCallRing(signal: CallSignal) {
+        firestore.collection("callInbox")
+            .document(signal.toUserId)
+            .collection("rings")
+            .document(signal.callId)
+            .set(
+                mapOf(
+                    "callId" to signal.callId,
+                    "fromUserId" to signal.fromUserId,
+                    "toUserId" to signal.toUserId,
+                    "type" to signal.type.name,
+                    "createdAtMillis" to signal.createdAtMillis,
+                    "createdAt" to FieldValue.serverTimestamp(),
+                    "status" to "ringing"
+                ),
+                SetOptions.merge()
+            )
+            .await()
+    }
+
     fun listenToIncomingCallSignals(
         userId: String,
         onSignal: (CallSignal) -> Unit,
         onError: (Exception) -> Unit
     ): ListenerRegistration {
-        return firestore.collectionGroup("signals")
-            .whereEqualTo("toUserId", userId)
+        return firestore.collection("callInbox")
+            .document(userId)
+            .collection("rings")
+            .whereEqualTo("status", "ringing")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     onError(error)
@@ -515,6 +537,22 @@ class FirebasePrivateTalkBackend : PrivateTalkBackend {
                         )
                     }
             }
+    }
+
+    suspend fun markIncomingCallRingHandled(userId: String, callId: String, status: String) {
+        firestore.collection("callInbox")
+            .document(userId)
+            .collection("rings")
+            .document(callId)
+            .set(
+                mapOf(
+                    "status" to status,
+                    "handledAtMillis" to System.currentTimeMillis(),
+                    "handledAt" to FieldValue.serverTimestamp()
+                ),
+                SetOptions.merge()
+            )
+            .await()
     }
 
     fun listenToCallSignals(

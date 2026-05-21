@@ -84,5 +84,17 @@ service cloud.firestore {
     match /calls/{callId}/signals/{signalId} {
       allow read, write: if signedIn();
     }
+
+    match /callInbox/{userId}/rings/{callId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow create: if signedIn()
+        && request.resource.data.toUserId == userId
+        && request.resource.data.fromUserId == request.auth.uid;
+      allow update: if signedIn() && (
+        request.auth.uid == userId
+        || resource.data.fromUserId == request.auth.uid
+      );
+      allow delete: if false;
+    }
   }
 }

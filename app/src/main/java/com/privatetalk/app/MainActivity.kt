@@ -585,6 +585,15 @@ private fun PrivateTalkApp() {
                                 }
                             }
                             stepName = AppStep.IncomingCall.name
+                            scope.launch {
+                                runCatching {
+                                    firebaseBackend.markIncomingCallRingHandled(
+                                        userId = activeSession.userId,
+                                        callId = signal.callId,
+                                        status = "shown"
+                                    )
+                                }
+                            }
                         }
                         calls.add(0, "Incoming $kind call")
                         context.showPrivateTalkNotification("Incoming PrivateTalk call", "Incoming $kind call")
@@ -767,13 +776,13 @@ private fun PrivateTalkApp() {
                             activeCallPeerName = selectedChatName
                             activeCallPeerId = peerUserId
                             activeCallIsCaller = true
-                            firebaseBackend.publishCallSignal(
-                                CallSignal(
+                            firebaseBackend.publishIncomingCallRing(
+                                signal = CallSignal(
                                     callId = callId,
                                     fromUserId = activeSession.userId,
                                     toUserId = peerUserId,
                                     type = if (kind == "video") CallType.VideoOffer else CallType.AudioOffer,
-                                    sdpOrCandidateJson = "{}",
+                                    sdpOrCandidateJson = "",
                                     createdAtMillis = System.currentTimeMillis()
                                 )
                             )
@@ -790,6 +799,18 @@ private fun PrivateTalkApp() {
             peerName = activeCallPeerName,
             callKind = activeCallKind,
             onAccept = {
+                val activeSession = session
+                if (activeSession != null && activeCallId.isNotBlank()) {
+                    scope.launch {
+                        runCatching {
+                            firebaseBackend.markIncomingCallRingHandled(
+                                userId = activeSession.userId,
+                                callId = activeCallId,
+                                status = "accepted"
+                            )
+                        }
+                    }
+                }
                 activeCallIsCaller = false
                 stepName = AppStep.CallRoom.name
             },
@@ -798,6 +819,11 @@ private fun PrivateTalkApp() {
                 if (activeSession != null && activeCallId.isNotBlank()) {
                     scope.launch {
                         runCatching {
+                            firebaseBackend.markIncomingCallRingHandled(
+                                userId = activeSession.userId,
+                                callId = activeCallId,
+                                status = "rejected"
+                            )
                             firebaseBackend.publishCallSignal(
                                 CallSignal(
                                     callId = activeCallId,
