@@ -767,6 +767,16 @@ private fun PrivateTalkApp() {
                             activeCallPeerName = selectedChatName
                             activeCallPeerId = peerUserId
                             activeCallIsCaller = true
+                            firebaseBackend.publishCallSignal(
+                                CallSignal(
+                                    callId = callId,
+                                    fromUserId = activeSession.userId,
+                                    toUserId = peerUserId,
+                                    type = if (kind == "video") CallType.VideoOffer else CallType.AudioOffer,
+                                    sdpOrCandidateJson = "{}",
+                                    createdAtMillis = System.currentTimeMillis()
+                                )
+                            )
                             calls.add(0, "$selectedChatName - outgoing $kind call")
                             stepName = AppStep.CallRoom.name
                         }.onFailure {
@@ -1680,13 +1690,13 @@ private fun CallRoomScreen(
                     when (signal.type) {
                         CallType.AudioOffer,
                         CallType.VideoOffer -> {
-                            if (!isCaller && signal.sdpOrCandidateJson.isNotBlank()) {
+                            if (!isCaller && signal.sdpOrCandidateJson.contains("\"sdp\"")) {
                                 webRtcSession.acceptOffer(signal.sdpOrCandidateJson)
                                 callStatus = "Connecting..."
                             }
                         }
                         CallType.Answer -> {
-                            if (isCaller && signal.sdpOrCandidateJson.isNotBlank()) {
+                            if (isCaller && signal.sdpOrCandidateJson.contains("\"sdp\"")) {
                                 webRtcSession.acceptAnswer(signal.sdpOrCandidateJson)
                                 callStatus = "Connecting..."
                             }
