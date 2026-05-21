@@ -46,6 +46,19 @@ data class CloudChatPreview(
     val updatedAtMillis: Long
 )
 
+data class AndroidUpdateInfo(
+    val versionCode: Long,
+    val versionName: String,
+    val apkUrl: String,
+    val notes: String
+)
+
+data class AppAnnouncement(
+    val title: String,
+    val body: String,
+    val active: Boolean
+)
+
 class FirebasePrivateTalkBackend : PrivateTalkBackend {
     private val auth = Firebase.auth
     private val firestore = Firebase.firestore
@@ -141,6 +154,27 @@ class FirebasePrivateTalkBackend : PrivateTalkBackend {
             mapOf("fcmToken" to token),
             SetOptions.merge()
         ).await()
+    }
+
+    suspend fun getAndroidUpdateInfo(): AndroidUpdateInfo? {
+        val doc = firestore.collection("adminConfig").document("androidUpdate").get().await()
+        if (!doc.exists()) return null
+        return AndroidUpdateInfo(
+            versionCode = doc.getLong("versionCode") ?: 0L,
+            versionName = doc.getString("versionName").orEmpty(),
+            apkUrl = doc.getString("apkUrl").orEmpty(),
+            notes = doc.getString("notes").orEmpty()
+        )
+    }
+
+    suspend fun getAnnouncement(): AppAnnouncement? {
+        val doc = firestore.collection("adminConfig").document("announcement").get().await()
+        if (!doc.exists()) return null
+        return AppAnnouncement(
+            title = doc.getString("title").orEmpty(),
+            body = doc.getString("body").orEmpty(),
+            active = doc.getBoolean("active") == true
+        )
     }
 
     suspend fun unlockWithGoogleIdToken(idToken: String): LocalSession {

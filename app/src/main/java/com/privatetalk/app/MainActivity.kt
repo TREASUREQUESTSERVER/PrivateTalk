@@ -175,6 +175,12 @@ private val ChatMuted = Color(0xFF8696A0)
 private const val FREE_PLAN_MAX_ENCRYPTED_MEDIA_BYTES = 620_000
 private const val FREE_PLAN_MAX_PROFILE_PHOTO_BYTES = 520_000
 
+private data class HomeNotice(
+    val title: String,
+    val body: String,
+    val actionUrl: String? = null
+)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -517,6 +523,7 @@ private fun PrivateTalkApp() {
     val loadedMessageChats = remember { mutableStateListOf<String>() }
     val notifiedCallIds = remember { mutableStateListOf<String>() }
     var syncNotice by remember { mutableStateOf<String?>(null) }
+    var homeNotice by remember { mutableStateOf<HomeNotice?>(null) }
 
     LaunchedEffect(Unit) {
         if (session == null) {
@@ -548,6 +555,24 @@ private fun PrivateTalkApp() {
         }
         runCatching {
             context.syncOneSignalUser(activeSession)
+        }
+        val updateInfo = runCatching { firebaseBackend.getAndroidUpdateInfo() }.getOrNull()
+        val announcement = runCatching { firebaseBackend.getAnnouncement() }.getOrNull()
+        homeNotice = when {
+            updateInfo != null && updateInfo.versionCode > 1L && updateInfo.apkUrl.isNotBlank() -> {
+                HomeNotice(
+                    title = "Update available ${updateInfo.versionName}".trim(),
+                    body = updateInfo.notes.ifBlank { "A newer PrivateTalk build is available." },
+                    actionUrl = updateInfo.apkUrl
+                )
+            }
+            announcement != null && announcement.active && announcement.body.isNotBlank() -> {
+                HomeNotice(
+                    title = announcement.title.ifBlank { "PrivateTalk notice" },
+                    body = announcement.body
+                )
+            }
+            else -> null
         }
     }
 
@@ -663,6 +688,7 @@ private fun PrivateTalkApp() {
             username = username,
             onUsernameChanged = { username = it },
             firebaseBackend = firebaseBackend,
+            homeNotice = homeNotice,
             onOpenDirectChat = { chatId, name ->
                 if (chats.none { it.id == chatId }) {
                     chats.add(0, ChatPreview(chatId, name, "Start secure chat", "Now", 0))
@@ -989,6 +1015,7 @@ private fun HomeScreen(
     username: String,
     onUsernameChanged: (String) -> Unit,
     firebaseBackend: FirebasePrivateTalkBackend,
+    homeNotice: HomeNotice?,
     onOpenDirectChat: (String, String) -> Unit,
     selectedTab: HomeTab,
     onTabSelected: (HomeTab) -> Unit,
@@ -1067,20 +1094,56 @@ private fun HomeScreen(
                 .background(Color.White)
                 .padding(padding)
         ) {
-            when (selectedTab) {
-                HomeTab.Chats -> ChatsTab(chats, onChatSelected)
-                HomeTab.Status -> StatusTab(profileName, statuses)
-                HomeTab.Calls -> CallsTab(calls)
-                HomeTab.Profile -> ProfileTab(
-                    session = session,
-                    profileName = profileName,
-                    onProfileNameChanged = onProfileNameChanged,
-                    profilePhotoUrl = profilePhotoUrl,
-                    onProfilePhotoChanged = onProfilePhotoChanged,
-                    username = username,
-                    onUsernameChanged = onUsernameChanged,
-                    firebaseBackend = firebaseBackend
-                )
+            Column(Modifier.fillMaxSize()) {
+                if (selectedTab == HomeTab.Chats && homeNotice != null) {
+                    HomeNoticeBanner(homeNotice)
+                }
+                Box(Modifier.weight(1f)) {
+                    when (selectedTab) {
+                        HomeTab.Chats -> ChatsTab(chats, onChatSelected)
+                        HomeTab.Status -> StatusTab(profileName, statuses)
+                        HomeTab.Calls -> CallsTab(calls)
+                        HomeTab.Profile -> ProfileTab(
+                            session = session,
+                            profileName = profileName,
+                            onProfileNameChanged = onProfileNameChanged,
+                            profilePhotoUrl = profilePhotoUrl,
+                            onProfilePhotoChanged = onProfilePhotoChanged,
+                            username = username,
+                            onUsernameChanged = onUsernameChanged,
+                            firebaseBackend = firebaseBackend
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeNoticeBanner(notice: HomeNotice) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F2EF))
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(notice.title, color = DeepGreen, fontWeight = FontWeight.Bold)
+                Text(notice.body, color = Ink, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            if (!notice.actionUrl.isNullOrBlank()) {
+                TextButton(onClick = {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(notice.actionUrl)))
+                }) {
+                    Text("Open")
+                }
             }
         }
     }
@@ -1651,6 +1714,7 @@ private fun CallRoomScreen(
     }
     var muted by rememberSaveable { mutableStateOf(false) }
     var cameraEnabled by rememberSaveable { mutableStateOf(callKind == "video") }
+    val connected by remember(callStatus) { derivedStateOf { callStatus == "Connected" } }
     val remoteRenderer = remember(callId) { org.webrtc.SurfaceViewRenderer(context) }
     val localRenderer = remember(callId) { org.webrtc.SurfaceViewRenderer(context) }
     val requiredPermissions = remember(callKind) {
@@ -1694,6 +1758,16 @@ private fun CallRoomScreen(
             callStatus = "Calling..."
         } else {
             callStatus = "Answering..."
+        }
+    }
+
+    LaunchedEffect(callId, isCaller, connected) {
+        if (isCaller && !connected) {
+            delay(30_000)
+            if (!connected) {
+                callStatus = "No answer"
+                onEndCall(true)
+            }
         }
     }
 
@@ -1826,6 +1900,16 @@ private fun CallRoomScreen(
                 shape = CircleShape
             ) {
                 Icon(Icons.Default.Call, contentDescription = "End call")
+            }
+        }
+
+        if (!callPermissionsGranted) {
+            Button(
+                onClick = { permissionLauncher.launch(requiredPermissions) },
+                modifier = Modifier.align(Alignment.Center),
+                colors = ButtonDefaults.buttonColors(containerColor = FreshGreen)
+            ) {
+                Text("Allow camera/mic")
             }
         }
     }
