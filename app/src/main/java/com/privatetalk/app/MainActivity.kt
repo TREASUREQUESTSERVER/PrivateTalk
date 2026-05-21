@@ -1285,7 +1285,10 @@ private fun ChatsTab(
         }
     } else {
         LazyColumn(contentPadding = PaddingValues(vertical = 2.dp)) {
-            items(chats) { chat ->
+            items(
+                items = chats,
+                key = { it.id }
+            ) { chat ->
                 ChatRow(chat = chat, onClick = { onChatSelected(chat) })
             }
         }
@@ -1321,7 +1324,6 @@ private fun ChatRow(chat: ChatPreview, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize()
             .clickable(onClick = onClick)
             .background(Color.White)
             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -1391,7 +1393,10 @@ private fun StatusTab(profileName: String, statuses: MutableList<String>) {
                 }
             }
         }
-        items(statuses) { status ->
+        items(
+            items = statuses,
+            key = { it }
+        ) { status ->
             Card(shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Avatar(status)
@@ -1411,7 +1416,10 @@ private fun StatusTab(profileName: String, statuses: MutableList<String>) {
 private fun CallsTab(calls: List<String>) {
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { SectionTitle("Calls") }
-        items(calls) { call ->
+        items(
+            items = calls,
+            key = { it }
+        ) { call ->
             Card(shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.AddIcCall, contentDescription = null, tint = DeepGreen)
@@ -2017,7 +2025,11 @@ private fun ChatRoomScreen(
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size + 1)
+            if (messages.size < 40) {
+                listState.animateScrollToItem(messages.size + 1)
+            } else {
+                listState.scrollToItem(messages.size + 1)
+            }
             if (currentUserId.isNotBlank()) {
                 runCatching { firebaseBackend.markChatRead(chatId, currentUserId) }
             }
