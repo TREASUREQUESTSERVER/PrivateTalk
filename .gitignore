@@ -1,0 +1,14 @@
+.gradle/
+.idea/
+.firebase/
+build/
+app/build/
+local.properties
+*.iml
+*.apk
+*.aab
+*.jks
+*.keystore
+*.exe
+*service-account*.json
+firebase-adminsdk*.json

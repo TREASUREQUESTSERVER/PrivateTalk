@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "950668517317",
+    "project_id": "privatetalk-7e2e7",
+    "storage_bucket": "privatetalk-7e2e7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:950668517317:android:7136d897e7ff8af1e8f5ac",
+        "android_client_info": {
+          "package_name": "com.privatetalk.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "950668517317-g44tnnhbi7nddr1llgfsd51ngb26gms3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.privatetalk.app",
+            "certificate_hash": "64f3912ade9b1e061f2d6efa713222d88935fe85"
+          }
+        },
+        {
+          "client_id": "950668517317-gtmehb4irh7grtgffhan1d4o8t1mtv89.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAIBQIhY6WO-6TOI2kLQkm3Xfo_pqGZ5Sw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "950668517317-gtmehb4irh7grtgffhan1d4o8t1mtv89.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

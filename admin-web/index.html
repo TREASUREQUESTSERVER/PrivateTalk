@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PrivateTalk Admin</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">PrivateTalk Admin</p>
+          <h1>Control room</h1>
+          <p class="subtle">Manage invites, users, and live app health for your private chat network.</p>
+        </div>
+        <button id="signInButton" class="button">Sign in with Google</button>
+        <button id="signOutButton" class="button ghost hidden">Sign out</button>
+      </section>
+
+      <section id="adminPanel" class="panel hidden">
+        <div class="account">
+          <div>
+            <p class="label">Signed in</p>
+            <strong id="accountName">-</strong>
+          </div>
+          <span id="adminState" class="pill">Checking admin</span>
+        </div>
+
+        <div class="stats-grid">
+          <article class="stat-card">
+            <span>Active invites</span>
+            <strong id="activeInviteCount">0</strong>
+          </article>
+          <article class="stat-card">
+            <span>Signed users</span>
+            <strong id="userCount">0</strong>
+          </article>
+          <article class="stat-card">
+            <span>Chats</span>
+            <strong id="chatCount">0</strong>
+          </article>
+          <article class="stat-card">
+            <span>Call signals</span>
+            <strong id="callCount">0</strong>
+          </article>
+        </div>
+
+        <nav class="tabs" aria-label="Admin sections">
+          <button class="tab active" type="button" data-tab="invites">Invites</button>
+          <button class="tab" type="button" data-tab="users">Users</button>
+          <button class="tab" type="button" data-tab="activity">Activity</button>
+          <button class="tab" type="button" data-tab="updates">Updates</button>
+          <button class="tab" type="button" data-tab="settings">Settings</button>
+        </nav>
+
+        <section class="tab-panel" data-panel="invites">
+          <form id="inviteForm" class="invite-form">
+            <label for="emailInput">Invite email</label>
+            <div class="input-row">
+              <input id="emailInput" type="email" placeholder="name@gmail.com" autocomplete="email" required>
+              <button class="button" type="submit">Add</button>
+            </div>
+          </form>
+
+          <details class="bulk-box">
+            <summary>Bulk add invites</summary>
+            <label for="bulkInviteInput">Paste emails, one per line</label>
+            <textarea id="bulkInviteInput" rows="5" placeholder="person1@gmail.com&#10;person2@gmail.com"></textarea>
+            <div class="row-actions left">
+              <button id="bulkInviteButton" class="button" type="button">Add all</button>
+              <button id="exportInvitesButton" class="button ghost" type="button">Export invites</button>
+            </div>
+          </details>
+
+          <p id="message" class="message"></p>
+
+          <div class="toolbar">
+            <input id="inviteSearch" type="search" placeholder="Search invited emails">
+            <select id="inviteFilter" aria-label="Invite status filter">
+              <option value="all">All invites</option>
+              <option value="active">Active only</option>
+              <option value="disabled">Disabled only</option>
+            </select>
+          </div>
+
+          <div class="list-head">
+            <h2>Invited emails</h2>
+            <button id="refreshButton" class="button ghost" type="button">Refresh</button>
+          </div>
+          <div id="inviteList" class="data-list"></div>
+        </section>
+
+        <section class="tab-panel hidden" data-panel="users">
+          <div class="toolbar">
+            <input id="userSearch" type="search" placeholder="Search users by name, email, or username">
+            <button id="exportUsersButton" class="button ghost" type="button">Export users</button>
+          </div>
+          <div class="list-head">
+            <h2>Users</h2>
+            <span class="subtle">Read-only on free plan</span>
+          </div>
+          <div id="userList" class="data-list"></div>
+        </section>
+
+        <section class="tab-panel hidden" data-panel="activity">
+          <div class="activity-grid">
+            <div>
+              <div class="list-head">
+                <h2>Recent chats</h2>
+                <span class="subtle">Last updated first</span>
+              </div>
+              <div id="chatList" class="data-list compact"></div>
+            </div>
+            <div>
+              <div class="list-head">
+                <h2>Recent calls</h2>
+                <span class="subtle">Signals only</span>
+              </div>
+              <div id="callList" class="data-list compact"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel hidden" data-panel="updates">
+          <div class="settings-grid two">
+            <article class="setting-card">
+              <h2>Android update notice</h2>
+              <p class="subtle">Save version info here. Next we can wire the Android app to show this as an update prompt.</p>
+              <form id="updateForm" class="stack-form">
+                <label for="updateVersionCode">Version code</label>
+                <input id="updateVersionCode" type="number" min="1" placeholder="2">
+                <label for="updateVersionName">Version name</label>
+                <input id="updateVersionName" type="text" placeholder="0.2.0">
+                <label for="updateUrl">APK download link</label>
+                <input id="updateUrl" type="url" placeholder="https://github.com/.../privatetalk.apk">
+                <label for="updateNotes">Release notes</label>
+                <textarea id="updateNotes" rows="4" placeholder="What changed in this update"></textarea>
+                <button class="button" type="submit">Save update info</button>
+              </form>
+            </article>
+            <article class="setting-card">
+              <h2>In-app announcement</h2>
+              <p class="subtle">Write a short notice for users. Next Android update can show it on the home screen.</p>
+              <form id="announcementForm" class="stack-form">
+                <label for="announcementTitle">Title</label>
+                <input id="announcementTitle" type="text" placeholder="PrivateTalk notice">
+                <label for="announcementBody">Message</label>
+                <textarea id="announcementBody" rows="5" placeholder="Write message for users"></textarea>
+                <label class="check-row">
+                  <input id="announcementActive" type="checkbox">
+                  Active
+                </label>
+                <button class="button" type="submit">Save announcement</button>
+              </form>
+            </article>
+          </div>
+        </section>
+
+        <section class="tab-panel hidden" data-panel="settings">
+          <div class="settings-grid">
+            <article class="setting-card">
+              <h2>Free-plan mode</h2>
+              <p class="subtle">Storage and Cloud Functions are disabled. Media is compressed and stored in Firestore.</p>
+              <span class="pill">Spark compatible</span>
+            </article>
+            <article class="setting-card">
+              <h2>APK updates</h2>
+              <p class="subtle">Firebase Hosting cannot host APK files on Spark. Use USB, Nearby Share, Google Drive, or GitHub Releases.</p>
+              <span class="pill muted">Manual install</span>
+            </article>
+            <article class="setting-card">
+              <h2>Notifications</h2>
+              <p class="subtle">Real push notifications need Cloud Functions, which requires Blaze. In-app real-time updates still work.</p>
+              <span class="pill muted">Limited</span>
+            </article>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

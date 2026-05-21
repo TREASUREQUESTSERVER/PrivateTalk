@@ -1,0 +1,17 @@
+{
+  "name": "privatetalk-functions",
+  "description": "Firebase backend triggers for PrivateTalk notifications",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "lint": "node --check index.js",
+    "deploy": "firebase deploy --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.1.2"
+  }
+}

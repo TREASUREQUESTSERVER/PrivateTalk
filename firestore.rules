@@ -1,0 +1,80 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && (
+          request.auth.token.email == "trqagency9@gmail.com"
+          || (
+            exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+            && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.active != false
+          )
+        );
+    }
+
+    function isChatMember(chatId) {
+      return signedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
+    }
+
+    match /admins/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    match /inviteEmails/{email} {
+      allow get: if signedIn();
+      allow list: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /adminConfig/{configId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /usernames/{username} {
+      allow read: if signedIn();
+      allow write: if signedIn();
+    }
+
+    match /chats/{chatId} {
+      allow create: if signedIn();
+      allow read: if isAdmin() || (signedIn() && request.auth.uid in resource.data.memberIds);
+      allow update: if signedIn() && request.auth.uid in resource.data.memberIds;
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read, write: if isChatMember(chatId);
+      }
+
+      match /typing/{userId} {
+        allow read: if isChatMember(chatId);
+        allow write: if isChatMember(chatId) && request.auth.uid == userId;
+      }
+
+      match /readReceipts/{userId} {
+        allow read: if isChatMember(chatId);
+        allow write: if isChatMember(chatId) && request.auth.uid == userId;
+      }
+    }
+
+    match /calls/{callId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /calls/{callId}/signals/{signalId} {
+      allow read, write: if signedIn();
+    }
+  }
+}
