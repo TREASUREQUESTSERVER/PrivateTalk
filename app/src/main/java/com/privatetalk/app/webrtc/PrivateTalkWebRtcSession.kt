@@ -22,6 +22,7 @@ import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoCapturer
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
+import org.webrtc.audio.JavaAudioDeviceModule
 
 class PrivateTalkWebRtcSession(
     private val context: Context,
@@ -49,10 +50,16 @@ class PrivateTalkWebRtcSession(
         )
         val encoderFactory = DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true)
         val decoderFactory = DefaultVideoDecoderFactory(eglBase.eglBaseContext)
+        val audioDeviceModule = JavaAudioDeviceModule.builder(context)
+            .setUseHardwareAcousticEchoCanceler(true)
+            .setUseHardwareNoiseSuppressor(true)
+            .createAudioDeviceModule()
         factory = PeerConnectionFactory.builder()
             .setVideoEncoderFactory(encoderFactory)
             .setVideoDecoderFactory(decoderFactory)
+            .setAudioDeviceModule(audioDeviceModule)
             .createPeerConnectionFactory()
+        audioDeviceModule.release()
     }
 
     fun start(
@@ -70,8 +77,19 @@ class PrivateTalkWebRtcSession(
         remoteRenderer?.init(eglBase.eglBaseContext, null)
         remoteRenderer?.setMirror(false)
 
+        val rtcConfig = PeerConnection.RTCConfiguration(
+            listOf(
+                PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
+                PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
+                PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer()
+            )
+        ).apply {
+            sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
+            continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
+        }
+
         peerConnection = factory.createPeerConnection(
-            listOf(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer()),
+            rtcConfig,
             object : PeerConnection.Observer {
                 override fun onSignalingChange(state: PeerConnection.SignalingState?) = Unit
                 override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit
@@ -114,7 +132,10 @@ class PrivateTalkWebRtcSession(
                     }
                 }
             }
-        )
+        ) ?: run {
+            onStateChanged("Could not start WebRTC")
+            return
+        }
 
         if (audioEnabled) {
             audioSource = factory.createAudioSource(MediaConstraints())
@@ -127,17 +148,23 @@ class PrivateTalkWebRtcSession(
         if (videoEnabled) {
             val activeCapturer = createCameraCapturer()
             if (activeCapturer != null) {
-                val source = factory.createVideoSource(false)
-                val textureHelper = SurfaceTextureHelper.create("PrivateTalkCamera", eglBase.eglBaseContext)
-                activeCapturer.initialize(textureHelper, context, source.capturerObserver)
-                activeCapturer.startCapture(960, 540, 24)
-                val track = factory.createVideoTrack("private-video", source)
-                track.setEnabled(true)
-                localRenderer?.let { track.addSink(it) }
-                peerConnection?.addTrack(track, listOf("private-stream"))
-                capturer = activeCapturer
-                videoSource = source
-                localVideoTrack = track
+                runCatching {
+                    val source = factory.createVideoSource(false)
+                    val textureHelper = SurfaceTextureHelper.create("PrivateTalkCamera", eglBase.eglBaseContext)
+                    activeCapturer.initialize(textureHelper, context, source.capturerObserver)
+                    activeCapturer.startCapture(640, 480, 24)
+                    val track = factory.createVideoTrack("private-video", source)
+                    track.setEnabled(true)
+                    localRenderer?.let { track.addSink(it) }
+                    peerConnection?.addTrack(track, listOf("private-stream"))
+                    capturer = activeCapturer
+                    videoSource = source
+                    localVideoTrack = track
+                }.onFailure {
+                    onStateChanged("Camera failed: ${it.message ?: "unknown"}")
+                }
+            } else {
+                onStateChanged("No camera found")
             }
         }
         onStateChanged("Ready")
@@ -152,7 +179,13 @@ class PrivateTalkWebRtcSession(
                     override fun onSetSuccess() {
                         onLocalSdp(encodeSdp(description))
                     }
+                    override fun onSetFailure(error: String?) {
+                        onStateChanged("Offer failed: ${error ?: "set failed"}")
+                    }
                 }, description)
+            }
+            override fun onCreateFailure(error: String?) {
+                onStateChanged("Offer failed: ${error ?: "create failed"}")
             }
         }, mediaConstraints())
     }
@@ -169,15 +202,31 @@ class PrivateTalkWebRtcSession(
                             override fun onSetSuccess() {
                                 onLocalSdp(encodeSdp(description))
                             }
+                            override fun onSetFailure(error: String?) {
+                                onStateChanged("Answer failed: ${error ?: "set failed"}")
+                            }
                         }, description)
                     }
+                    override fun onCreateFailure(error: String?) {
+                        onStateChanged("Answer failed: ${error ?: "create failed"}")
+                    }
                 }, mediaConstraints())
+            }
+            override fun onSetFailure(error: String?) {
+                onStateChanged("Offer read failed: ${error ?: "set failed"}")
             }
         }, offer)
     }
 
     fun acceptAnswer(remoteSdpJson: String) {
-        peerConnection?.setRemoteDescription(object : SdpObserverAdapter() {}, decodeSdp(remoteSdpJson))
+        peerConnection?.setRemoteDescription(
+            object : SdpObserverAdapter() {
+                override fun onSetFailure(error: String?) {
+                    onStateChanged("Answer read failed: ${error ?: "set failed"}")
+                }
+            },
+            decodeSdp(remoteSdpJson)
+        )
     }
 
     fun addIceCandidate(candidateJson: String) {
