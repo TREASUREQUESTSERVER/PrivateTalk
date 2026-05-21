@@ -29,7 +29,15 @@ service cloud.firestore {
     match /inviteEmails/{email} {
       allow get: if signedIn();
       allow list: if isAdmin();
-      allow write: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (
+          signedIn()
+          && request.auth.token.email == email
+          && resource.data.active != false
+          && request.resource.data.email == resource.data.email
+          && request.resource.data.active == resource.data.active
+        );
     }
 
     match /adminConfig/{configId} {
