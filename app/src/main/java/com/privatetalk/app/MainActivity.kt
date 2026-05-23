@@ -60,6 +60,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -138,6 +139,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.viewinterop.AndroidView
@@ -164,6 +168,7 @@ private fun Context.syncOneSignalUser(session: AppSession) {
 
 private val DeepGreen = Color(0xFF075E54)
 private val FreshGreen = Color(0xFF25D366)
+private val SoftGreen = Color(0xFFE6F3EF)
 private val WarmPaper = Color(0xFFECE5DD)
 private val Ink = Color(0xFF17211F)
 private val Muted = Color(0xFF63716D)
@@ -902,6 +907,10 @@ private fun PrivateTalkApp() {
 private fun InviteScreen(onUnlocked: (LocalSession) -> Unit) {
     var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var isLoading by rememberSaveable { mutableStateOf(false) }
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var displayName by rememberSaveable { mutableStateOf("") }
+    var authMode by rememberSaveable { mutableStateOf("google") }
     val scope = rememberCoroutineScope()
     val firebaseBackend = remember { FirebasePrivateTalkBackend() }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -937,45 +946,126 @@ private fun InviteScreen(onUnlocked: (LocalSession) -> Unit) {
                 colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
                 Column(Modifier.padding(18.dp)) {
-                    Text("Only approved Google accounts can enter this private network.", color = Ink)
+                    Text("Only approved invited emails can enter this private network.", color = Ink)
+                    Text(
+                        "Google sign-in stays available, and email/password works as a backup when Google services are unreliable.",
+                        color = Muted,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                     Spacer(Modifier.height(16.dp))
-                    Button(
-                        onClick = {
-                            isLoading = true
-                            errorMessage = null
-                            scope.launch {
-                                runCatching {
-                                    val googleIdOption = GetGoogleIdOption.Builder()
-                                        .setFilterByAuthorizedAccounts(false)
-                                        .setAutoSelectEnabled(false)
-                                        .setServerClientId(context.getString(R.string.default_web_client_id))
-                                        .build()
-                                    val request = GetCredentialRequest.Builder()
-                                        .addCredentialOption(googleIdOption)
-                                        .build()
-                                    val result = credentialManager.getCredential(context, request)
-                                    val credential = result.credential
-                                    if (credential !is CustomCredential || credential.type != TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                                        throw IllegalArgumentException("Google credential was not returned.")
-                                    }
-                                    val googleCredential = GoogleIdTokenCredential.createFrom(credential.data)
-                                    firebaseBackend.unlockWithGoogleIdToken(googleCredential.idToken)
-                                }
-                                    .onSuccess {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Button(
+                            onClick = { authMode = "email"; errorMessage = null },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (authMode == "email") DeepGreen else SoftGreen,
+                                contentColor = if (authMode == "email") Color.White else DeepGreen
+                            )
+                        ) {
+                            Text("Email")
+                        }
+                        Button(
+                            onClick = { authMode = "google"; errorMessage = null },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (authMode == "google") DeepGreen else SoftGreen,
+                                contentColor = if (authMode == "google") Color.White else DeepGreen
+                            )
+                        ) {
+                            Text("Google")
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    if (authMode == "email") {
+                        OutlinedTextField(
+                            value = displayName,
+                            onValueChange = { displayName = it },
+                            label = { Text("Your name") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = email,
+                            onValueChange = { email = it.trim() },
+                            label = { Text("Invited email") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = { Text("Password") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done)
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                isLoading = true
+                                errorMessage = null
+                                scope.launch {
+                                    runCatching {
+                                        firebaseBackend.unlockWithInvitedEmail(email, password, displayName)
+                                    }.onSuccess {
                                         isLoading = false
                                         onUnlocked(it)
-                                    }
-                                    .onFailure {
+                                    }.onFailure {
                                         isLoading = false
                                         errorMessage = firebaseErrorMessage(it)
                                     }
-                            }
-                        },
-                        enabled = !isLoading,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = DeepGreen)
-                    ) {
-                        Text(if (isLoading) "Checking Google account..." else "Sign in with Google")
+                                }
+                            },
+                            enabled = !isLoading,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = DeepGreen)
+                        ) {
+                            Text(if (isLoading) "Checking invite..." else "Continue with email")
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                isLoading = true
+                                errorMessage = null
+                                scope.launch {
+                                    runCatching {
+                                        val googleIdOption = GetGoogleIdOption.Builder()
+                                            .setFilterByAuthorizedAccounts(false)
+                                            .setAutoSelectEnabled(false)
+                                            .setServerClientId(context.getString(R.string.default_web_client_id))
+                                            .build()
+                                        val request = GetCredentialRequest.Builder()
+                                            .addCredentialOption(googleIdOption)
+                                            .build()
+                                        val result = credentialManager.getCredential(context, request)
+                                        val credential = result.credential
+                                        if (credential !is CustomCredential || credential.type != TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                                            throw IllegalArgumentException("Google credential was not returned.")
+                                        }
+                                        val googleCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                                        firebaseBackend.unlockWithGoogleIdToken(googleCredential.idToken)
+                                    }
+                                        .onSuccess {
+                                            isLoading = false
+                                            onUnlocked(it)
+                                        }
+                                        .onFailure {
+                                            isLoading = false
+                                            errorMessage = firebaseErrorMessage(it)
+                                        }
+                                }
+                            },
+                            enabled = !isLoading,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = DeepGreen)
+                        ) {
+                            Text(if (isLoading) "Checking Google account..." else "Sign in with Google")
+                        }
                     }
                     errorMessage?.let {
                         Spacer(Modifier.height(8.dp))

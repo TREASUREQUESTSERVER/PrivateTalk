@@ -2,6 +2,7 @@ package com.privatetalk.app.backend
 
 import android.net.Uri
 import com.google.firebase.Firebase
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.auth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FieldValue
@@ -73,10 +74,14 @@ class FirebasePrivateTalkBackend : PrivateTalkBackend {
             ?: email.substringBefore("@").ifBlank { "Member" }
         val identityKey = userDoc.getString("publicIdentityKey")
             ?: "GO-${email.take(4).uppercase(Locale.US)}-${firebaseUser.uid.take(6).uppercase(Locale.US)}"
+        val provider = userDoc.getString("authProvider")
+            ?: firebaseUser.providerData.firstOrNull { it.providerId != "firebase" }?.providerId
+            ?: "email"
+        val invitePrefix = if (provider == "google.com") "google" else "email"
         return LocalSession(
             userId = firebaseUser.uid,
             displayName = displayName,
-            inviteId = "google:$email",
+            inviteId = "$invitePrefix:$email",
             identityKeyPreview = identityKey
         )
     }
@@ -316,24 +321,14 @@ class FirebasePrivateTalkBackend : PrivateTalkBackend {
         require(password.length >= 6) { "Password must be at least 6 characters." }
         require(cleanName.length >= 2) { "Enter your name first." }
 
-        val inviteRef = firestore.collection("inviteEmails").document(normalizedEmail)
-        val inviteDoc = inviteRef.get().await()
-        if (!inviteDoc.exists()) {
-            throw IllegalArgumentException("This email is not invited.")
-        }
-        val active = inviteDoc.getBoolean("active") ?: true
-        if (!active) {
-            throw IllegalArgumentException("This invite email is disabled.")
-        }
-
         val authResult = runCatching {
             auth.signInWithEmailAndPassword(normalizedEmail, password).await()
         }.recoverCatching { signInError ->
             val message = signInError.message.orEmpty()
             if (
+                signInError is FirebaseAuthInvalidUserException ||
                 message.contains("no user record", ignoreCase = true) ||
-                message.contains("INVALID_LOGIN_CREDENTIALS", ignoreCase = true) ||
-                message.contains("INVALID_EMAIL", ignoreCase = true)
+                message.contains("user-not-found", ignoreCase = true)
             ) {
                 auth.createUserWithEmailAndPassword(normalizedEmail, password).await()
             } else {
@@ -342,6 +337,18 @@ class FirebasePrivateTalkBackend : PrivateTalkBackend {
         }.getOrThrow()
 
         val uid = requireNotNull(authResult.user?.uid) { "Firebase user id missing." }
+        val inviteRef = firestore.collection("inviteEmails").document(normalizedEmail)
+        val inviteDoc = inviteRef.get().await()
+        if (!inviteDoc.exists()) {
+            auth.signOut()
+            throw IllegalArgumentException("This email is not invited.")
+        }
+        val active = inviteDoc.getBoolean("active") ?: true
+        if (!active) {
+            auth.signOut()
+            throw IllegalArgumentException("This invite email is disabled.")
+        }
+
         val identityPreview = "EM-${normalizedEmail.take(4).uppercase(Locale.US)}-${uid.take(6).uppercase(Locale.US)}"
 
         val userData = mapOf(
@@ -350,6 +357,7 @@ class FirebasePrivateTalkBackend : PrivateTalkBackend {
             "photoUrl" to null,
             "publicIdentityKey" to identityPreview,
             "inviteEmail" to normalizedEmail,
+            "authProvider" to "password",
             "createdAt" to FieldValue.serverTimestamp(),
             "lastSeenAt" to FieldValue.serverTimestamp()
         )
